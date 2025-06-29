@@ -24,11 +24,11 @@ inputs:
   destChannel:
     description: Mattermost channel (ignored because incoming webhooks are locked to a channel)
     required: false
-    default: null
+    default: ""
   zitiLogLevel:
     description: Ziti log level
     required: false
-    default: 3
+    default: "3"
 runs:
   using: docker
   image: Dockerfile
