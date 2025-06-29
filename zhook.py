@@ -21,10 +21,9 @@ class MattermostWebhookBody:
   todoColor = "#FFFFFF"
   watchColor = "#FFD700"
 
-  def __init__(self, username, icon, channel, eventName, eventJsonStr, actionRepo):
+  def __init__(self, username, icon, eventName, eventJsonStr, actionRepo):
     self.username = username
     self.icon = icon
-    self.channel = channel
     self.eventName = eventName.lower()
     self.eventJsonStr = eventJsonStr
     self.actionRepo = actionRepo
@@ -37,7 +36,6 @@ class MattermostWebhookBody:
       # "icon_url": self.icon,
       "username": self.senderJson['login'],
       "icon_url": self.senderJson['avatar_url'],
-      "channel": self.channel,
       "props": {"card": f"```json\n{self.eventJsonStr}\n```"},
     }
 
@@ -355,7 +353,6 @@ if __name__ == '__main__':
   eventJsonStr = os.getenv("INPUT_EVENTJSON")
   username = os.getenv("INPUT_SENDERUSERNAME")
   icon = os.getenv("INPUT_SENDERICONURL")
-  channel = os.getenv("INPUT_DESTCHANNEL")
   actionRepo = os.getenv("GITHUB_ACTION_REPOSITORY")
   eventName = os.getenv("GITHUB_EVENT_NAME")
 
@@ -370,14 +367,59 @@ if __name__ == '__main__':
     print("ERROR: no Ziti identity provided, set INPUT_ZITIID or INPUT_ZITIJWT")
     exit(1)
 
+  def generate_json_schema(obj, max_depth=10, current_depth=0):
+    """Generate a schema representation of a JSON object by inferring types from values."""
+    if current_depth >= max_depth:
+      return "<max_depth_reached>"
+
+    if obj is None:
+      return "null"
+    elif isinstance(obj, bool):
+      return "boolean"
+    elif isinstance(obj, int):
+      return "integer"
+    elif isinstance(obj, float):
+      return "number"
+    elif isinstance(obj, str):
+      return "string"
+    elif isinstance(obj, list):
+      if len(obj) == 0:
+        return "array[]"
+      # Get schema of first element as representative
+      element_schema = generate_json_schema(obj[0], max_depth, current_depth + 1)
+      return f"array[{element_schema}]"
+    elif isinstance(obj, dict):
+      schema = {}
+      for key, value in obj.items():
+        schema[key] = generate_json_schema(value, max_depth, current_depth + 1)
+      return schema
+    else:
+      return f"unknown_type({type(obj).__name__})"
+
+  # Validate zitiId as JSON
+  try:
+    zitiIdJson = json.loads(zitiId)
+  except Exception as e:
+    print(f"ERROR: zitiId is not valid JSON: {e}")
+    print(f"zitiId content: {zitiId}")
+    exit(1)
+
   idFilename = "id.json"
   with open(idFilename, 'w') as f:
     f.write(zitiId)
+
+  # Load the identity file after it's been written and closed
+  try:
     openziti.load(idFilename)
+  except Exception as e:
+    print(f"ERROR: Failed to load Ziti identity: {e}")
+    schema = generate_json_schema(zitiIdJson)
+    print(f"DEBUG: zitiId schema for troubleshooting: {json.dumps(schema, indent=2)}")
+    raise e
 
   # Create webhook body
   try:
-    mwb = MattermostWebhookBody(username, icon, channel, eventName, eventJsonStr, actionRepo)
+    mwb = MattermostWebhookBody(username, icon, eventName, eventJsonStr, actionRepo)
   except Exception as e:
     print(f"Exception creating webhook body: {e}")
     raise e
