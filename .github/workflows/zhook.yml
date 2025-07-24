@@ -132,12 +132,13 @@ jobs:
           EOF
           
           docker build -t zhook-action .
+          docker build -t zhook-action-dbg -f debug.Dockerfile .
           docker run --rm \
             -v "${{ github.workspace }}:${{ github.workspace }}" \
             -w "${{ github.workspace }}" \
             --env-file /tmp/docker.env \
-            --entrypoint /bin/sh \
-            zhook-action -xc "
+            --entrypoint /bin/bash \
+            zhook-action-dbg -xc "
               ulimit -c unlimited
               exec /app/zhook.py
             "
