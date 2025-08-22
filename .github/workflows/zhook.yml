@@ -72,13 +72,10 @@ jobs:
           set -o pipefail
           set -o xtrace
           
-          # Base64 encode JSON to avoid whitespace issues in env file
-          ENCODED_JSON=$(echo "${INPUT_EVENTJSON}" | base64 -w 0)
-          
           cat > /tmp/docker.env << EOF
           INPUT_ZITIID=${INPUT_ZITIID}
           INPUT_WEBHOOKURL=${INPUT_WEBHOOKURL}
-          INPUT_EVENTJSON_B64=${ENCODED_JSON}
+          INPUT_EVENTJSON=${INPUT_EVENTJSON}
           INPUT_SENDERUSERNAME=${INPUT_SENDERUSERNAME}
           INPUT_SENDERICONURL=${INPUT_SENDERICONURL}
           INPUT_ZITILOGLEVEL=${INPUT_ZITILOGLEVEL}
