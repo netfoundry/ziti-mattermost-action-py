@@ -505,24 +505,25 @@ if __name__ == '__main__':
         schema[key] = generate_json_schema(value, max_depth, current_depth + 1)
       return schema
     else:
-      return f"unknown_type({type(obj).__name__})"
+      # Try decoding inline as base64 if provided and not valid JSON
+      decodedInline = _try_decode_b64_to_json_str(zitiIdInput) if zitiIdInput else None
+      if decodedInline is not None:
+        zitiIdEncoding = zitiIdInput
+        zitiIdJson = decodedInline
+        zitiIdContext = json.loads(decodedInline)
+        print("Detected base64-encoded identity in INPUT_ZITIID and decoded it")
 
-  # Accept only inline JSON for zitiId; do not interpret as file path or base64
+    if zitiIdJson is None:
+      print("ERROR: no Ziti identity provided, set INPUT_ZITIID (inline JSON or base64-encoded), or INPUT_ZITIJWT")
+      exit(1)
+
+  # Keep a small helper for safe string hints (used only in error/debug prints if needed)
   def _safe_hint(s):
     if s is None:
       return "<none>"
     hint_len = len(s)
     head = s[:8].replace('\n', ' ')
     return f"len={hint_len}, startswith='{head}...'"
-
-  try:
-    zitiIdJson = json.loads(zitiId)
-    zitiIdContent = zitiId
-  except Exception as e:
-    print("ERROR: zitiId must be inline JSON (not a file path or base64).")
-    print(f"DEBUG: INPUT_ZITIID hint: {_safe_hint(zitiId)}")
-    print(f"DEBUG: json error: {e}")
-    exit(1)
 
   idFilename = "id.json"
   with open(idFilename, 'w') as f:
