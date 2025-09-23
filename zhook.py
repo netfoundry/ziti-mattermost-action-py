@@ -385,21 +385,29 @@ if __name__ == '__main__':
   # Post the webhook over Ziti
   headers = {'Content-Type': 'application/json'}
   data = mwb.dumpJson()
+  debug = os.getenv("ZHOOK_DEBUG", "").casefold() == "true"
 
-  with openziti.monkeypatch():
-    try:
-      if os.getenv("ZHOOK_DEBUG", "").lower() == "true":
-        print(f"Posting webhook to {url} with headers {headers} and data {data}")
-      else:
-        print(f"Posting webhook to {url} with headers {headers}")
+  try:
+      with openziti.monkeypatch():
+          if debug:
+              print(f"Posting webhook to {url} with headers {headers} and data {data}")
+          else:
+              print(f"Posting webhook to {url} with headers {headers}")
 
-      # breakpoint()
-      r = requests.post(url, headers=headers, data=data)
-      print(f"Response Status: {r.status_code}")
-      print(r.headers)
-      print(r.content)
-      sys.exit(0)
-    except Exception as e:
-      print(f"Exception posting webhook: {e}")
-      raise e
+          r = requests.post(url, headers=headers, data=data)
+          print(f"Response Status: {r.status_code}")
+
+          if debug:
+              print(f"Response HEADERS: {r.headers}")
+              print(f"Response CONTENT: {r.content}")
+
+          if 200 <= r.status_code < 300:
+              print(f"INFO: successfully posted. status code {r.status_code}")
+              sys.exit(0)
+          else:
+              print(f"ERROR: unexpected status code {r.status_code}")
+              sys.exit(1)
+
+  except Exception as e:
+      print(f"Exception in webhook or ziti context: {e}")
       sys.exit(1)
