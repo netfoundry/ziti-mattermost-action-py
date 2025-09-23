@@ -35,8 +35,12 @@ jobs:
           INPUT_DESTCHANNEL: dev-notifications
           INPUT_SENDERICONURL: https://github.com/fluidicon.png
         run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind
           pip install --upgrade requests openziti
-          python ./zhook.py
+          valgrind --tool=memcheck --leak-check=full \
+            --show-leak-kinds=all --track-origins=yes \
+            python ./zhook.py
           
       - uses: ./  # use self to bring the pain forward
         name: run action
