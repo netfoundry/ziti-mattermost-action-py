@@ -35,16 +35,21 @@ jobs:
           INPUT_DESTCHANNEL: dev-notifications
           INPUT_SENDERICONURL: https://github.com/fluidicon.png
         run: |
-          sudo apt-get update
-          sudo apt-get install -y valgrind
           pip install --upgrade requests openziti
           set +e
-          valgrind --tool=memcheck --leak-check=full \
-            --show-leak-kinds=all --track-origins=yes \
+          if [ "${ZHOOK_VALGRIND}" = "true" ]; then
+            echo "⚠️ running with valgrind..."
+            sudo apt-get update
+            sudo apt-get install -y valgrind
+            echo "⚙️ Running under valgrind..."
+            valgrind --tool=memcheck --leak-check=full \
+              --show-leak-kinds=all --track-origins=yes \
+              python ./zhook.py
+          else
             python ./zhook.py
-          echo "⚠️ valgrind/zhook exited with code $?, whatever..."
+          fi
+          echo "⚠️ zhook.py exited with code $?, continuing..."
           exit 0
-      
 
       - uses: ./  # use self to bring the pain forward
         name: run action
