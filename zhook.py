@@ -348,46 +348,71 @@ class MattermostWebhookBody:
     return json.dumps(self.body)
 
 
-if __name__ == '__main__':
-  url = os.getenv("INPUT_WEBHOOKURL")
+def _try_parse_json(s: str):
+  """Try to parse a string as JSON and return True if successful."""
+  try:
+    json.loads(s)
+    return True
+  except Exception:
+    return False
 
-  # Handle event JSON provided inline; auto-detect if it's JSON or base64-encoded JSON
-  def _try_parse_json(s: str):
-    try:
-      json.loads(s)
-      return True
-    except Exception:
-      return False
 
-  def _try_decode_b64_to_json_str(s: str):
-    if s is None:
-      return None
+def _try_decode_b64_to_json_str(s: str):
+  """Try to decode a base64 string to a JSON string with various fallback strategies."""
+  if s is None:
+    return None
+  try:
+    # strict validation first
+    decoded = base64.b64decode(s, validate=True)
+    decoded_str = decoded.decode('utf-8')
+    if _try_parse_json(decoded_str):
+      return decoded_str
+  except Exception:
+    # Try non-strict decode
     try:
-      # strict validation first
-      decoded = base64.b64decode(s, validate=True)
+      decoded = base64.b64decode(s)
       decoded_str = decoded.decode('utf-8')
       if _try_parse_json(decoded_str):
         return decoded_str
     except Exception:
-      # Try non-strict decode
+      pass
+    # As a last resort, try appending one to four '=' padding chars
+    for i in range(1, 5):
       try:
-        decoded = base64.b64decode(s)
+        s_padded = s + ("=" * i)
+        decoded = base64.b64decode(s_padded)
         decoded_str = decoded.decode('utf-8')
         if _try_parse_json(decoded_str):
           return decoded_str
       except Exception:
-        pass
-      # As a last resort, try appending one to four '=' padding chars
-      for i in range(1, 5):
-        try:
-          s_padded = s + ("=" * i)
-          decoded = base64.b64decode(s_padded)
-          decoded_str = decoded.decode('utf-8')
-          if _try_parse_json(decoded_str):
-            return decoded_str
-        except Exception:
-          continue
-    return None
+        continue
+  return None
+
+
+def _safe_hint(s):
+  """Create a safe string hint for debugging purposes."""
+  if s is None:
+    return "<none>"
+  hint_len = len(s)
+  head = s[:8].replace('\n', ' ')
+  return f"len={hint_len}, startswith='{head}...'"
+
+
+@openziti.zitify()
+def doPost(url, payload):
+  """Post webhook payload to the specified URL over Ziti."""
+  # Single request doesn't need session management
+  response = requests.post(url, json=payload)
+  print(f"Response Status: {response.status_code}")
+  print(response.headers)
+  print(response.content)
+  return response
+
+
+if __name__ == '__main__':
+  url = os.getenv("INPUT_WEBHOOKURL")
+
+  # Handle event JSON provided inline; auto-detect if it's JSON or base64-encoded JSON
 
   eventInput = os.getenv("INPUT_EVENTJSON")
   eventJson = ""
@@ -451,14 +476,6 @@ if __name__ == '__main__':
       print("ERROR: no Ziti identity provided, set INPUT_ZITIID (inline JSON or base64-encoded), or INPUT_ZITIJWT")
       exit(1)
 
-  # Keep a small helper for safe string hints (used only in error/debug prints if needed)
-  def _safe_hint(s):
-    if s is None:
-      return "<none>"
-    hint_len = len(s)
-    head = s[:8].replace('\n', ' ')
-    return f"len={hint_len}, startswith='{head}...'"
-
   idFilename = "id.json"
   with open(idFilename, 'w') as f:
     f.write(zitiIdJson)
@@ -477,37 +494,19 @@ if __name__ == '__main__':
   # Build dict payload; requests will set Content-Type when using json=
   payload = mwb.body
 
-  with openziti.monkeypatch():
-    # Load the identity inside the context so that the same owner tears down
-    # resources, reducing the chance of double shutdown/free.
-    try:
-      openziti.load(idFilename)
-    except Exception as e:
-      print(f"ERROR: Failed to load Ziti identity: {e}")
-      print(f"DEBUG: INPUT_ZITIID hint: {_safe_hint(os.getenv('INPUT_ZITIID'))}")
-      print(f"DEBUG: zitiIdJson len={len(zitiIdJson) if zitiIdJson else 0}")
-      raise e
+  # Load the identity for Ziti operations
+  try:
+    openziti.load(idFilename)
+  except Exception as e:
+    print(f"ERROR: Failed to load Ziti identity: {e}")
+    print(f"DEBUG: INPUT_ZITIID hint: {_safe_hint(os.getenv('INPUT_ZITIID'))}")
+    print(f"DEBUG: zitiIdJson len={len(zitiIdJson) if zitiIdJson else 0}")
+    raise e
 
-    session = None
-    r = None
-    try:
-      session = requests.Session()
-      print(f"Posting webhook to {url} with JSON payload keys {list(payload.keys())}")
-      r = session.post(url, json=payload)
-      print(f"Response Status: {r.status_code}")
-      print(r.headers)
-      print(r.content)
-    except Exception as e:
-      print(f"Exception posting webhook: {e}")
-      raise e
-    finally:
-      try:
-        if r is not None:
-          r.close()
-      except Exception:
-        pass
-      try:
-        if session is not None:
-          session.close()
-      except Exception:
-        pass
+  # Post the webhook over Ziti
+  try:
+    print(f"Posting webhook to {url} with JSON payload keys {list(payload.keys())}")
+    response = doPost(url, payload)
+  except Exception as e:
+    print(f"Exception posting webhook: {e}")
+    raise e
